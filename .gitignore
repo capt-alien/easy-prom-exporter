@@ -1,0 +1,12 @@
+# Go build files
+*.out
+*.exe
+*.test
+
+# Dependency files (optional to ignore)
+go.sum
+
+# Editor stuff
+.vscode/
+*.swp
+.DS_Store
