@@ -1,19 +1,23 @@
-# Run the exporter directly
-run:
-	go run main.go
-
-# Build the binary
+# Build the Go binary
 build:
 	go build -o easy-prom-exporter
 
-# Tidy up go.mod and go.sum
-tidy:
-	go mod tidy
+# Run the Go app directly
+run:
+	go run main.go
 
-# Lint with go vet
+# Clean up built binaries
+clean:
+	rm -f easy-prom-exporter
+
+# Run linter
 vet:
 	go vet .
 
-# Remove built binary
-clean:
-	rm -f easy-prom-exporter
+# Sync go.mod and go.sum
+tidy:
+	go mod tidy
+
+# Cross-compile for ARM64 (Pi)
+build-arm:
+	GOARCH=arm64 GOOS=linux go build -o easy-prom-exporter
