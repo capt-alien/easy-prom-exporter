@@ -10,3 +10,8 @@ go.sum
 .vscode/
 *.swp
 .DS_Store
+
+
+# Funkey MacOS metadata
+._*
+.DS_Store
