@@ -1,81 +1,96 @@
 # Easy Prometheus Exporter
 
-A lightweight Prometheus exporter written in Go to monitor Vikunja's PVC mount health and disk usage.
-
-Built to run as a systemd service on bare metal or as a sidecar inside a Kubernetes pod.
+A lightweight custom Prometheus exporter written in Go, containerized with Docker, and deployed as a sidecar in Kubernetes to monitor a Persistent Volume Claim (PVC).
 
 ---
 
-## 🔧 What It Does
+## 📊 What It Exports
 
-- Exposes `simple_heartbeat` to confirm the exporter is alive
-- Checks if Vikunja's PVC mount (`/mnt/ssd1`) is present
-  → `vikunja_pvc_mount_available` = 1 if mounted, 0 if not
-- (Coming Soon) Reports disk usage percent
-  → `vikunja_pvc_usage_percent`
-
-All metrics are available at:
-
-```
-http://<host>:2112/metrics
-```
+- `simple_heartbeat`: Confirms the exporter is alive
+- `vikunja_pvc_usage_percent`: Percent of disk used on `/mnt/ssd1`
+- `vikunja_pvc_free_bytes`: Free disk space on `/mnt/ssd1` (in bytes)
+- `vikunja_pvc_inode_usage_percent`: Percent of inodes used on `/mnt/ssd1`
 
 ---
 
-## 🚀 Run It
-
-### Local (for dev/testing)
+## 🚀 Local Dev
 
 ```bash
-go run main.go
+make build       # Build the binary for ARM
+make deploy      # Move binary to /usr/local/bin and restart service
+make run         # Run manually (or systemd takes over)
 ```
 
 ---
 
-## 🛠️ Run as a systemd Service
+## 🐳 Docker
 
-### Install:
+Build and push to GHCR:
 
 ```bash
-./install_service.sh
+docker build -t ghcr.io/capt-alien/easy-prom-exporter:latest .
+docker push ghcr.io/capt-alien/easy-prom-exporter:latest
 ```
 
-This will:
-- Build and move the binary to `/usr/local/bin`
-- Register a `systemd` unit
-- Enable and start the service on boot
-
-### Uninstall:
+Run locally:
 
 ```bash
-./uninstall_service.sh
+docker run -d \
+  -p 2112:2112 \
+  -v /mnt/ssd1:/mnt/ssd1:ro \
+  ghcr.io/capt-alien/easy-prom-exporter:latest
 ```
 
-This will:
-- Stop the service
-- Disable and delete the unit
-- Optionally remove the binary
+---
+
+## ☸️ Kubernetes Deployment (Sidecar)
+
+This exporter is deployed as a **sidecar container** inside the Vikunja pod. It mounts the same PVC as Vikunja and exposes metrics via port `2112`.
+
+Example container spec:
+
+```yaml
+- name: easy-prom-exporter
+  image: ghcr.io/capt-alien/easy-prom-exporter:latest
+  ports:
+    - containerPort: 2112
+  volumeMounts:
+    - name: ssd1-mount
+      mountPath: /mnt/ssd1
+      readOnly: true
+```
 
 ---
 
-## 🐳 Coming Soon
+## 🔔 Prometheus Integration
 
-- Docker container support
-- K8s deployment as a sidecar to the Vikunja pod
-- Additional metrics: free bytes, inodes used
-
----
-
-## 📡 Prometheus Scrape Config Example
+Prometheus is configured with:
 
 ```yaml
 - job_name: 'vikunja_exporter'
+  scrape_interval: 15s
   static_configs:
-    - targets: ['rp1:2112']
+    - targets: ['<pod_ip>:2112']
 ```
+
+Or better: expose the pod with a `ClusterIP` service and scrape by DNS.
 
 ---
 
-## 🧠 Author
+## 📦 Alerting
 
-Built by [capt-alien](https://github.com/capt-alien) as part of a home-lab monitoring stack powered by Prometheus, K3s, and Go.
+Alert rules include:
+
+- PVC usage > 85%
+- Inode usage > 90%
+- Mount unavailable
+
+Hooked into Alertmanager via local webhook (`localhost:5001/webhook`).
+
+---
+
+## 🧠 Maintainer Notes
+
+- Built in Go 1.22
+- Runs on ARM (`aarch64`)
+- Uses native `syscall.Statfs` for disk and inode stats
