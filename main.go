@@ -3,9 +3,9 @@ package main
 import (
 	"net/http"
 	"log"
+	"os"
 	"syscall"
 	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -18,17 +18,17 @@ var (
 
 	pvcUsagePercent = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "vikunja_pvc_usage_percent",
-		Help: "Percentage of disk space used on the Vikunja PVC mounted at /mnt/ssd1",
+		Help: "Percentage of disk space used on the Vikunja PVC mounted path",
 	})
 
 	pvcFreeBytes = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "vikunja_pvc_free_bytes",
-		Help: "Number of free bytes available on the Vikunja PVC mounted at /mnt/ssd1",
+		Help: "Number of free bytes available on the PVC mounted path",
 	})
 
 	pvcInodeUsagePercent = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "vikunja_pvc_inode_usage_percent",
-		Help: "Percentage of inodes used on the Vikunja PVC mounted at /mnt/ssd1",
+		Help: "Percentage of inodes used on the PVC mounted path",
 	})
 )
 
@@ -54,29 +54,34 @@ func updatePVCStats(path string) {
 	inodesFree := float64(stat.Ffree)
 	inodesUsed := inodesTotal - inodesFree
 
-if inodesTotal > 0 {
-	inodeUsagePercent := (inodesUsed / inodesTotal) * 100
-	pvcInodeUsagePercent.Set(inodeUsagePercent)
-} else {
-	pvcInodeUsagePercent.Set(0)
+	if inodesTotal > 0 {
+		inodeUsagePercent := (inodesUsed / inodesTotal) * 100
+		pvcInodeUsagePercent.Set(inodeUsagePercent)
+	} else {
+		pvcInodeUsagePercent.Set(0)
 	}
 }
 
 func main() {
+	// Load mount path from environment variable
+	mountPath := os.Getenv("EXPORTER_PATH")
+	if mountPath == "" {
+		mountPath = "/data" // fallback default
+	}
+	log.Printf("Monitoring mount path: %s\n", mountPath)
+
 	prometheus.MustRegister(simpleHeartbeat)
 	prometheus.MustRegister(pvcUsagePercent)
 	prometheus.MustRegister(pvcFreeBytes)
-		prometheus.MustRegister(pvcInodeUsagePercent)
+	prometheus.MustRegister(pvcInodeUsagePercent)
 
 	simpleHeartbeat.Set(1)
 
 	go func() {
 		for {
-			updatePVCStats("/mnt/ssd1")
+			updatePVCStats(mountPath)
 			time.Sleep(30 * time.Second)
 		}
-
-
 	}()
 
 	http.Handle("/metrics", promhttp.Handler())
